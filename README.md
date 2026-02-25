@@ -2,6 +2,9 @@
 
 **An ambient snake bot that plays itself — forever.**
 
+Try it:
+https://opticoding.github.io/snake-dash/
+
 ---
 
 ## What is this?
@@ -63,7 +66,7 @@ Some directions worth exploring:
 
 If you have an idea for improving the bot's score *without* making it visually less interesting, that is exactly the kind of PR worth discussing.
 
-→ [Open an issue or PR on GitHub](https://github.com/OptiCode/dash-snake)
+→ [Open an issue or PR on GitHub](https://github.com/OptiCode/snake-dash)
 
 ---
 
