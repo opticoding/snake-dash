@@ -5,6 +5,8 @@
 Try it:
 https://opticoding.github.io/snake-dash/
 
+<img width="985" height="667" alt="image" src="https://github.com/user-attachments/assets/eb00c934-bd25-4b7d-97bf-77041f150688" />
+
 ---
 
 ## What is this?
