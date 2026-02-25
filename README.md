@@ -70,21 +70,6 @@ If you have an idea for improving the bot's score *without* making it visually l
 
 ---
 
-## Tuning it
-
-All parameters live at the top of the `<script>` tag inside `index.html`:
-
-| Variable | Default | Effect |
-|---|---|---|
-| `SPEED_DEFAULT` | `200` | Starting tick interval in ms (lower = faster) |
-| `SPACE_MARGIN` | `1.0` | Safety multiplier — raise for more cautious play |
-| `EAT_FLASH_ENABLED` | `false` | Screen flash on food intake |
-| `SMOOTH_THRESHOLD` | `200` | Below this speed (ms), movement interpolation is disabled |
-
-The speed slider in the UI overrides `SPEED_DEFAULT` at runtime.
-
----
-
 ## Statistics
 
 All values are comparable regardless of grid size; each stat shows the cell count (X×Y) of the grid it was achieved on in parentheses.
@@ -181,4 +166,4 @@ At typical grid sizes (800–2000 cells) and speeds (10–400 ms/tick), all bot 
 
 ---
 
-*Built by [OptiCode](https://github.com/OptiCode). Single-file, zero dependencies, runs anywhere.*
+*Built by OptiCode. Single-file, zero dependencies, runs anywhere.*
