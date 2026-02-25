@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snake Dash</title>
+  <style>
+    :root {
+      /* Core palette */
+      --color-bg: #02000b;
+      --color-bg-dark: #0e061b;
+      /* Canvas background gradient */
+      --color-bg-grad-edge: #020202;
+      --color-bg-grad-mid: #05000e;
+      --color-bg-radial-rgb: 19, 8, 37;
+      --color-bg-radial-opacity: 0.6;
+      --color-panel-bg: rgba(10, 0, 15, 0.5);
+      --color-overlay: rgba(0, 0, 0, 0.6);
+      /* Borders */
+      --color-border: rgba(80, 0, 100, 0.7);
+      --color-border-subtle: rgba(80, 0, 100, 0.45);
+      --color-border-strong: rgba(80, 0, 100, 0.5);
+      /* Primary purple (7c3aed) */
+      --color-primary: #7c3aed;
+      --color-primary-rgb: 124, 58, 237;
+      /* Accent purple (c026d3) */
+      --color-accent-purple: #c026d3;
+      --color-accent-purple-rgb: 192, 38, 211;
+      /* Pink (f472b6 / 244,114,182) */
+      --color-pink: #f96ab4;
+      --color-pink-rgb: 244, 114, 182;
+      /* Text */
+      --color-text: #a78bfa;
+      --color-text-rgb: 167, 139, 250;
+      --color-text-hover: #c4b5fd;
+      --color-text-muted: rgba(var(--color-text-rgb), 0.7);
+      --color-text-muted-2: rgba(var(--color-text-rgb), 0.6);
+      /* Canvas / game-specific */
+      --color-grid-rgb: 156, 91, 184;
+      --color-eat-flash-rgb: 139, 7, 159;
+      --color-food-rgb: 217, 70, 239;
+      --color-food-secondary-rgb: 168, 85, 247;
+      --color-food-fill: #f96ab4;
+      --color-food-shadow: #f96ab4;
+      --color-eye-rgb: 255, 255, 255;
+      --color-eye-shadow-rgb: 255, 220, 240;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--color-bg);
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    #game-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #canvas-wrap {
+      position: relative;
+      border: 1px solid var(--color-border);
+      box-shadow: 0 0 60px rgba(var(--color-primary-rgb), 0.07), 0 0 120px rgba(var(--color-pink-rgb), 0.03);
+      flex-shrink: 0;
+      overflow: visible;
+    }
+    #game-canvas { display: block; }
+
+    #speed-slider-wrap {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%) translateY(calc(-50% - 2px));
+      z-index: 10;
+      width: 80%;
+      padding: 7px 16px;
+      background: var(--color-panel-bg);
+      border: 1px solid var(--color-border-subtle);
+      border-radius: 12px;
+      backdrop-filter: blur(6px);
+    }
+    #speed-slider-wrap label {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--color-text);
+      white-space: nowrap;
+    }
+    #speed-slider-wrap label span {
+      line-height: 1;
+      display: flex;
+      align-items: center;
+    }
+    #speed-slider-wrap input[type="range"] {
+      flex: 1;
+      min-width: 0;
+      height: 6px;
+      align-self: center;
+      -webkit-appearance: none;
+      appearance: none;
+      background: rgba(var(--color-primary-rgb), 0.3);
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    #speed-slider-wrap input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--color-primary), var(--color-accent-purple));
+      box-shadow: 0 0 8px rgba(var(--color-accent-purple-rgb), 0.45);
+      cursor: pointer;
+    }
+    #speed-slider-wrap input[type="range"]::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--color-primary), var(--color-accent-purple));
+      box-shadow: 0 0 8px rgba(var(--color-accent-purple-rgb), 0.45);
+      cursor: pointer;
+      border-style: none;
+    }
+    .game-btn {
+      flex-shrink: 0;
+      padding: 4px 10px;
+      font-size: 11px;
+      color: var(--color-text);
+      background: rgba(var(--color-primary-rgb), 0.25);
+      border: 1px solid var(--color-border-strong);
+      border-radius: 6px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .game-btn:hover {
+      background: rgba(var(--color-primary-rgb), 0.4);
+      color: var(--color-text-hover);
+    }
+
+    #score-display {
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%) translateY(50%);
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      padding: 7px 20px;
+      background: var(--color-panel-bg);
+      border: 1px solid var(--color-border-subtle);
+      border-radius: 12px;
+      font-size: 13px;
+      color: var(--color-text);
+      white-space: nowrap;
+      backdrop-filter: blur(6px);
+    }
+    #score-display strong { color: var(--color-pink); }
+
+    #stats-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      background: var(--color-overlay);
+    }
+    #stats-modal.open { display: flex; }
+    #stats-modal-inner {
+      background: var(--color-bg);
+      border: 1px solid var(--color-border-subtle);
+      border-radius: 12px;
+      padding: 20px 24px;
+      min-width: 280px;
+      max-width: 90vw;
+    }
+    #stats-modal h3 {
+      font-size: 14px;
+      color: var(--color-text);
+      margin-bottom: 16px;
+      font-weight: 600;
+    }
+    #stats-modal .stat-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      font-size: 12px;
+      color: var(--color-text);
+      margin-bottom: 8px;
+    }
+    #stats-modal .stat-row strong { color: var(--color-pink); }
+    #stats-modal .stat-section {
+      margin-bottom: 16px;
+    }
+    #stats-modal .stat-section:last-child { margin-bottom: 0; }
+    #stats-modal .stat-section-title {
+      font-size: 11px;
+      color: var(--color-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <div id="canvas-wrap">
+      <canvas id="game-canvas"></canvas>
+      <div id="speed-slider-wrap">
+        <label>
+          <span>Speed</span>
+          <input type="range" id="speed-slider">
+          <button type="button" id="reset-btn" class="game-btn">Reset</button>
+        </label>
+      </div>
+      <div id="score-display">
+        <span>Score <strong id="score">0</strong></span>
+        <span>Best <strong id="best">0</strong></span>
+        <button type="button" id="stats-btn" class="game-btn">Stats</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="stats-modal">
+    <div id="stats-modal-inner">
+      <h3>Statistics</h3>
+      <div class="stat-section">
+        <div class="stat-section-title">All-time records</div>
+        <div id="stats-alltime"></div>
+      </div>
+      <div class="stat-section">
+        <div class="stat-section-title">Last round</div>
+        <div id="stats-last"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+(function () {
+  'use strict';
+
+  var LS_KEY_SPEED = 'opticode-snake-ai-speed';
+  var LS_KEY_STATS = 'opticode-snake-ai-stats';
+  var BASE_CELL = 20;
+
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  var PALETTE = {};
+  function initPalette() {
+    PALETTE.bg = cssVar('--color-bg');
+    PALETTE.bgDark = cssVar('--color-bg-dark');
+    PALETTE.bgGradEdge = cssVar('--color-bg-grad-edge');
+    PALETTE.bgGradMid = cssVar('--color-bg-grad-mid');
+    PALETTE.bgRadialRgb = cssVar('--color-bg-radial-rgb');
+    PALETTE.bgRadialOpacity = cssVar('--color-bg-radial-opacity');
+    PALETTE.gridRgb = cssVar('--color-grid-rgb');
+    PALETTE.eatFlashRgb = cssVar('--color-eat-flash-rgb');
+    PALETTE.pinkRgb = cssVar('--color-pink-rgb');
+    PALETTE.foodRgb = cssVar('--color-food-rgb');
+    PALETTE.foodSecondaryRgb = cssVar('--color-food-secondary-rgb');
+    PALETTE.foodFill = cssVar('--color-food-fill');
+    PALETTE.foodShadow = cssVar('--color-food-shadow');
+    PALETTE.pink = cssVar('--color-pink');
+    PALETTE.accentPurple = cssVar('--color-accent-purple');
+    PALETTE.eyeRgb = cssVar('--color-eye-rgb');
+    PALETTE.eyeShadowRgb = cssVar('--color-eye-shadow-rgb');
+  }
+  var LARGE_CELL = 40;
+  var WIDTH_THRESHOLD = 1920;
+  var SMALL_SCREEN = 600;   // px — below this, padding halves
+  var SMOOTH_THRESHOLD = 200; // ms — at this speed or slower, enable full interpolation
+  var SPEED_MIN     = 400; // slowest (largest delay ms)
+  var SPEED_MAX     = 10;  // fastest (smallest delay ms)
+  var SPEED_DEFAULT = 200;
+  var EAT_FLASH_ENABLED = false; // set true for screen flash on food intake
+  var SPACE_MARGIN = 1.5; // flood-fill from next head must be >= snake.length * this factor
+
+  // Snake colors
+  var SNAKE_HEAD_RGB = [232, 83, 192];
+  var SNAKE_TAIL_RGB = [57, 40, 217];
+
+  function lerpRGB(a, b, t) {
+    return 'rgb(' +
+      Math.round(a[0] * (1 - t) + b[0] * t) + ',' +
+      Math.round(a[1] * (1 - t) + b[1] * t) + ',' +
+      Math.round(a[2] * (1 - t) + b[2] * t) + ')';
+  }
+
+  // ── Grid config ────────────────────────────────────────────────────────────
+
+  function getPadding() { return window.innerWidth < SMALL_SCREEN ? 16 : 24; }
+
+  function computeGridConfig() {
+    var w = window.innerWidth;
+    var h = window.innerHeight;
+    var pad = getPadding();
+    var cell = w >= WIDTH_THRESHOLD ? LARGE_CELL : BASE_CELL;
+    var gw = Math.floor((w - pad * 2) / cell);
+    var gh = Math.floor((h - pad * 2) / cell);
+    if (gw % 2 !== 0) gw--;
+    if (gw < 4) gw = 4;
+    if (gh < 2) gh = 2;
+    return { GW: gw, GH: gh, CELL: cell, SW: gw * cell, SH: gh * cell };
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  function ptKey(p, GW) { return p.y * GW + p.x; }
+
+  function getNeighborPts(p, GW, GH) {
+    var out = [];
+    if (p.x > 0)       out.push({ x: p.x - 1, y: p.y });
+    if (p.x < GW - 1)  out.push({ x: p.x + 1, y: p.y });
+    if (p.y > 0)       out.push({ x: p.x, y: p.y - 1 });
+    if (p.y < GH - 1)  out.push({ x: p.x, y: p.y + 1 });
+    return out;
+  }
+
+  function gridNeighbors(k, GW, GH) {
+    var x = k % GW;
+    var y = (k - x) / GW;
+    var out = [];
+    if (x > 0)      out.push(k - 1);
+    if (x < GW - 1) out.push(k + 1);
+    if (y > 0)      out.push(k - GW);
+    if (y < GH - 1) out.push(k + GW);
+    return out;
+  }
+
+  function ptToDir(from, to) {
+    if (to.x > from.x) return 'R';
+    if (to.x < from.x) return 'L';
+    if (to.y > from.y) return 'D';
+    return 'U';
+  }
+
+  function edgeDistance(pt, GW, GH) {
+    return Math.min(pt.x, pt.y, GW - 1 - pt.x, GH - 1 - pt.y);
+  }
+
+  function isNearEdge(pt, GW, GH) {
+    return edgeDistance(pt, GW, GH) <= 1;
+  }
+
+  function edgeStepCost(pt, GW, GH) {
+    return edgeDistance(pt, GW, GH) <= 1 ? 5 : 1;
+  }
+
+  function randomFood(snake, GW, GH) {
+    var f;
+    do {
+      f = { x: Math.floor(Math.random() * GW), y: Math.floor(Math.random() * GH) };
+    } while (snake.some(function (s) { return s.x === f.x && s.y === f.y; }));
+    return f;
+  }
+
+  // ── Pathfinding ────────────────────────────────────────────────────────────
+
+  function bfsPath(start, target, snake, GW, GH) {
+    var startKey  = ptKey(start, GW);
+    var targetKey = ptKey(target, GW);
+    var blocked   = new Set(snake.map(function (p) { return ptKey(p, GW); }));
+    blocked.delete(startKey);
+    blocked.delete(ptKey(snake[snake.length - 1], GW));
+
+    var parent = new Map();
+    parent.set(startKey, -1);
+    var queue = [startKey];
+
+    while (queue.length > 0) {
+      var curr = queue.shift();
+      var nbs = gridNeighbors(curr, GW, GH);
+      for (var i = 0; i < nbs.length; i++) {
+        var nb = nbs[i];
+        if (parent.has(nb) || blocked.has(nb)) continue;
+        parent.set(nb, curr);
+        if (nb === targetKey) {
+          var path = [];
+          var c = nb;
+          while (c !== startKey) {
+            path.unshift({ x: c % GW, y: Math.floor(c / GW) });
+            c = parent.get(c);
+          }
+          return path;
+        }
+        queue.push(nb);
+      }
+    }
+    return null;
+  }
+
+  function pathToTargetAvoidingEdges(start, target, snake, GW, GH) {
+    var startKey  = ptKey(start, GW);
+    var targetKey = ptKey(target, GW);
+    var blocked   = new Set(snake.map(function (p) { return ptKey(p, GW); }));
+    blocked.delete(startKey);
+    blocked.delete(ptKey(snake[snake.length - 1], GW));
+
+    var dist   = new Map();
+    var parent = new Map();
+    dist.set(startKey, 0);
+    parent.set(startKey, -1);
+    var pq = [[0, startKey]];
+
+    while (pq.length > 0) {
+      pq.sort(function (a, b) { return a[0] - b[0]; });
+      var top  = pq.shift();
+      var d    = top[0];
+      var curr = top[1];
+
+      if (curr === targetKey) {
+        var path = [];
+        var c = curr;
+        while (c !== startKey) {
+          path.unshift({ x: c % GW, y: Math.floor(c / GW) });
+          c = parent.get(c);
+        }
+        return path;
+      }
+      if (d > (dist.has(curr) ? dist.get(curr) : Infinity)) continue;
+
+      var nbs = gridNeighbors(curr, GW, GH);
+      for (var i = 0; i < nbs.length; i++) {
+        var nb = nbs[i];
+        if (blocked.has(nb)) continue;
+        var nbPt    = { x: nb % GW, y: Math.floor(nb / GW) };
+        var newDist = d + edgeStepCost(nbPt, GW, GH);
+        var oldDist = dist.has(nb) ? dist.get(nb) : Infinity;
+        if (newDist < oldDist) {
+          dist.set(nb, newDist);
+          parent.set(nb, curr);
+          pq.push([newDist, nb]);
+        }
+      }
+    }
+    return null;
+  }
+
+  function canReach(src, dst, snake, GW, GH) {
+    var srcKey = ptKey(src, GW);
+    var dstKey = ptKey(dst, GW);
+    if (srcKey === dstKey) return true;
+
+    var blocked = new Set(snake.map(function (p) { return ptKey(p, GW); }));
+    blocked.delete(srcKey);
+    blocked.delete(dstKey);
+
+    var visited = new Set([srcKey]);
+    var queue   = [srcKey];
+
+    while (queue.length > 0) {
+      var curr = queue.shift();
+      var nbs  = gridNeighbors(curr, GW, GH);
+      for (var i = 0; i < nbs.length; i++) {
+        var nb = nbs[i];
+        if (visited.has(nb) || blocked.has(nb)) continue;
+        if (nb === dstKey) return true;
+        visited.add(nb);
+        queue.push(nb);
+      }
+    }
+    return false;
+  }
+
+  function floodCount(head, snake, GW, GH) {
+    var headKey = ptKey(head, GW);
+    var blocked = new Set(snake.map(function (p) { return ptKey(p, GW); }));
+    blocked.delete(headKey);
+
+    var count   = 1;
+    var visited = new Set([headKey]);
+    var queue   = [headKey];
+
+    while (queue.length > 0) {
+      var curr = queue.shift();
+      var nbs  = gridNeighbors(curr, GW, GH);
+      for (var i = 0; i < nbs.length; i++) {
+        var nb = nbs[i];
+        if (visited.has(nb) || blocked.has(nb)) continue;
+        visited.add(nb);
+        count++;
+        queue.push(nb);
+      }
+    }
+    return count;
+  }
+
+  function isBodyOccupied(pt, snake, GW) {
+    var key = ptKey(pt, GW);
+    return snake.some(function (p, i) { return i > 0 && ptKey(p, GW) === key; });
+  }
+
+  // Stricter than the old isStepSafe: requires tail reachability AND enough open space.
+  function isMoveSafe(nextHead, snake, food, GW, GH) {
+    var willEat  = nextHead.x === food.x && nextHead.y === food.y;
+    var simSnake = willEat
+      ? [nextHead].concat(snake)
+      : [nextHead].concat(snake.slice(0, -1));
+    if (!canReach(simSnake[0], simSnake[simSnake.length - 1], simSnake, GW, GH)) return false;
+    return floodCount(simSnake[0], simSnake, GW, GH) >= simSnake.length * SPACE_MARGIN;
+  }
+
+  // How spread out the proposed position is from the body (higher = more open space).
+  // Encourages the snake to avoid hugging its own body, reducing trap frequency.
+  function bodySpreadScore(pt, snake) {
+    var score = 0;
+    var check = Math.min(snake.length, 20); // only nearby segments matter
+    for (var i = 1; i < check; i++) {
+      score += Math.min(Math.abs(pt.x - snake[i].x) + Math.abs(pt.y - snake[i].y), 5);
+    }
+    return score;
+  }
+
+
+  // ── DOM refs ───────────────────────────────────────────────────────────────
+
+  var canvas      = document.getElementById('game-canvas');
+  var canvasWrap  = document.getElementById('canvas-wrap');
+  var scoreEl     = document.getElementById('score');
+  var bestEl      = document.getElementById('best');
+  var speedSlider = document.getElementById('speed-slider');
+
+  // ── State ──────────────────────────────────────────────────────────────────
+
+  var cfg      = computeGridConfig();
+  var rafId    = 0;
+  var speed    = SPEED_DEFAULT;
+  var autoPath = [];
+
+  var g = {
+    snake:    [],
+    dir:      'R',
+    food:     { x: 0, y: 0 },
+    score:    0,
+    lastTick: 0,
+    frame:    0,
+    eatFlash: 0,
+    playing:   false,
+    prevSnake: [], // snake positions before last tick (for whole-body interpolation)
+  };
+
+  // ── LocalStorage ───────────────────────────────────────────────────────────
+
+  function loadSpeed() {
+    try {
+      var s = localStorage.getItem(LS_KEY_SPEED);
+      if (s) {
+        var v = parseInt(s, 10);
+        if (v >= SPEED_MAX && v <= SPEED_MIN) return v;
+      }
+    } catch (e) {}
+    return SPEED_DEFAULT;
+  }
+
+  function saveSpeed(v) {
+    try { localStorage.setItem(LS_KEY_SPEED, String(v)); } catch (e) {}
+  }
+
+  function loadStats() {
+    try {
+      var s = localStorage.getItem(LS_KEY_STATS);
+      if (s) {
+        var o = JSON.parse(s);
+        return {
+          maxScore: Math.max(0, parseInt(o.maxScore, 10) || 0),
+          maxScoreCells: parseInt(o.maxScoreCells, 10) || 0,
+          maxCellsFilledPct: Math.max(0, parseFloat(o.maxCellsFilledPct) || 0),
+          maxCellsFilledPctCells: parseInt(o.maxCellsFilledPctCells, 10) || 0,
+          maxRoundLength: Math.max(0, parseInt(o.maxRoundLength, 10) || 0),
+          maxRoundLengthCells: parseInt(o.maxRoundLengthCells, 10) || 0,
+          minCellsFilledPerScore: (o.minCellsFilledPerScore != null && o.minCellsFilledPerScore !== Infinity)
+            ? parseFloat(o.minCellsFilledPerScore) : null,
+          minCellsFilledPerScoreCells: parseInt(o.minCellsFilledPerScoreCells, 10) || 0,
+          lastRound: o.lastRound || null
+        };
+      }
+    } catch (e) {}
+    return {
+      maxScore: 0, maxScoreCells: 0,
+      maxCellsFilledPct: 0, maxCellsFilledPctCells: 0,
+      maxRoundLength: 0, maxRoundLengthCells: 0,
+      minCellsFilledPerScore: null, minCellsFilledPerScoreCells: 0,
+      lastRound: null
+    };
+  }
+
+  function saveStats(stats) {
+    try { localStorage.setItem(LS_KEY_STATS, JSON.stringify(stats)); } catch (e) {}
+  }
+
+  function recordRoundStats(score, snakeLen, cells) {
+    var stats = loadStats();
+    if (score > stats.maxScore) {
+      stats.maxScore = score;
+      stats.maxScoreCells = cells;
+    }
+    var pct = cells > 0 ? (snakeLen / cells) * 100 : 0;
+    if (pct > stats.maxCellsFilledPct) {
+      stats.maxCellsFilledPct = pct;
+      stats.maxCellsFilledPctCells = cells;
+    }
+    if (snakeLen > stats.maxRoundLength) {
+      stats.maxRoundLength = snakeLen;
+      stats.maxRoundLengthCells = cells;
+    }
+    if (score > 0) {
+      var cfps = snakeLen / score;
+      if (stats.minCellsFilledPerScore == null || cfps < stats.minCellsFilledPerScore) {
+        stats.minCellsFilledPerScore = cfps;
+        stats.minCellsFilledPerScoreCells = cells;
+      }
+    }
+    stats.lastRound = {
+      score: score,
+      cellsFilledPct: pct,
+      roundLength: snakeLen,
+      cellsFilledPerScore: score > 0 ? snakeLen / score : null,
+      cells: cells
+    };
+    saveStats(stats);
+  }
+
+  function formatBestDisplay(score, cells) {
+    if (!score && score !== 0) return '0';
+    return cells ? score + ' (' + cells + ' cells)' : String(score);
+  }
+
+  function updateBestDisplay() {
+    var stats = loadStats();
+    if (bestEl) bestEl.textContent = formatBestDisplay(stats.maxScore, stats.maxScoreCells || null);
+  }
+
+  function updateBest() {
+    if (bestEl) updateBestDisplay();
+  }
+
+  // ── Draw ───────────────────────────────────────────────────────────────────
+
+  function draw(ts) {
+    var ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    var GW = cfg.GW, GH = cfg.GH, CELL = cfg.CELL, SW = cfg.SW, SH = cfg.SH;
+    g.frame++;
+    // Smooth interpolation only at slower speeds — fast movement looks better as discrete steps
+    var interp = (speed >= SMOOTH_THRESHOLD && ts && g.lastTick > 0)
+      ? Math.min(1, (ts - g.lastTick) / speed)
+      : 1;
+
+    var bgGrad = ctx.createLinearGradient(0, 0, 0, SH);
+    bgGrad.addColorStop(0, PALETTE.bgGradEdge);
+    bgGrad.addColorStop(0.5, PALETTE.bgGradMid);
+    bgGrad.addColorStop(1, PALETTE.bgGradEdge);
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, SW, SH);
+
+    var cx = SW / 2, cy = SH / 2;
+    var maxR = Math.sqrt(SW * SW + SH * SH) / 2;
+    var radialGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxR);
+    radialGrad.addColorStop(0, 'rgba(' + PALETTE.bgRadialRgb + ', ' + PALETTE.bgRadialOpacity + ')');
+    radialGrad.addColorStop(1, 'rgba(' + PALETTE.bgRadialRgb + ', 0)');
+    ctx.fillStyle = radialGrad;
+    ctx.fillRect(0, 0, SW, SH);
+
+    ctx.strokeStyle = 'rgba(' + PALETTE.gridRgb + ', 0.15)';
+    ctx.lineWidth   = 0.5;
+    ctx.beginPath();
+    for (var i = 0; i <= GW; i++) { var px = i * CELL; ctx.moveTo(px, 0); ctx.lineTo(px, SH); }
+    for (var i = 0; i <= GH; i++) { var py = i * CELL; ctx.moveTo(0, py); ctx.lineTo(SW, py); }
+    ctx.stroke();
+
+    if (g.eatFlash > 0) {
+      ctx.fillStyle = 'rgba(' + PALETTE.eatFlashRgb + ', ' + (g.eatFlash * 0.03) + ')';
+      ctx.fillRect(0, 0, SW, SH);
+      g.eatFlash--;
+    }
+
+    if (g.playing && autoPath.length > 0 && g.snake.length > 0) {
+      ctx.save();
+      ctx.strokeStyle    = 'rgba(' + PALETTE.pinkRgb + ', 0.35)';
+      ctx.lineWidth      = 1.5;
+      ctx.setLineDash([4, 6]);
+      ctx.lineDashOffset = -(g.frame * 0.5) % 10;
+      ctx.shadowBlur     = 6;
+      ctx.shadowColor    = 'rgba(' + PALETTE.pinkRgb + ', 0.5)';
+      ctx.beginPath();
+      var h0 = g.snake[0];
+      ctx.moveTo(h0.x * CELL + CELL / 2, h0.y * CELL + CELL / 2);
+      for (var i = 0; i < autoPath.length; i++) {
+        ctx.lineTo(autoPath[i].x * CELL + CELL / 2, autoPath[i].y * CELL + CELL / 2);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (g.snake.length > 0) {
+      var food  = g.food;
+      var pulse = Math.sin(g.frame * 0.07) * 0.5 + 0.5;
+      var fx    = food.x * CELL + CELL / 2;
+      var fy    = food.y * CELL + CELL / 2;
+      var foodR = 3.5 + pulse * 2;
+
+      var grad = ctx.createRadialGradient(fx, fy, 0, fx, fy, CELL * 0.9);
+      grad.addColorStop(0,   'rgba(' + PALETTE.foodRgb + ', ' + (0.28 + pulse * 0.15) + ')');
+      grad.addColorStop(0.5, 'rgba(' + PALETTE.foodSecondaryRgb + ', ' + (0.09 + pulse * 0.06) + ')');
+      grad.addColorStop(1,   'rgba(' + PALETTE.foodSecondaryRgb + ', 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(fx, fy, CELL * 0.9, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.shadowBlur  = 7;
+      ctx.shadowColor = PALETTE.foodShadow;
+      ctx.fillStyle   = PALETTE.foodFill;
+      ctx.beginPath();
+      ctx.arc(fx, fy, foodR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    var snake = g.snake;
+    var prev  = g.prevSnake;
+    var len   = snake.length;
+
+    for (var i = len - 1; i >= 0; i--) {
+      var seg    = snake[i];
+      var isHead = i === 0;
+      var t      = len > 1 ? i / (len - 1) : 0;
+
+      // Each segment slides from its position in prevSnake to its current position.
+      // prevSnake[i] may be undefined for the newly grown tail on eat ticks.
+      var vx = seg.x, vy = seg.y;
+      if (interp < 1 && prev[i]) {
+        vx = prev[i].x + (seg.x - prev[i].x) * interp;
+        vy = prev[i].y + (seg.y - prev[i].y) * interp;
+      }
+
+      ctx.fillStyle = lerpRGB(SNAKE_HEAD_RGB, SNAKE_TAIL_RGB, t);
+      if (isHead) {
+        ctx.shadowBlur  = 9;
+        ctx.shadowColor = PALETTE.pink;
+      } else if (i < 5) {
+        ctx.shadowBlur  = Math.max(1, Math.floor((7 - i) / 2));
+        ctx.shadowColor = PALETTE.accentPurple;
+      } else {
+        ctx.shadowBlur = 0;
+      }
+
+      var pad    = isHead ? 2 : 3;
+      var radius = CELL * 0.15;
+      var rx = vx * CELL + pad;
+      var ry = vy * CELL + pad;
+      var rw = CELL - pad * 2;
+      var rh = CELL - pad * 2;
+
+      ctx.beginPath();
+      if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(rx, ry, rw, rh, radius);
+      } else {
+        ctx.rect(rx, ry, rw, rh);
+      }
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+
+    if (len > 0) {
+      var headSeg = snake[0];
+      var vhx = headSeg.x, vhy = headSeg.y;
+      if (interp < 1 && prev[0]) {
+        vhx = prev[0].x + (headSeg.x - prev[0].x) * interp;
+        vhy = prev[0].y + (headSeg.y - prev[0].y) * interp;
+      }
+      var d       = g.dir;
+      var hx      = vhx * CELL + CELL / 2;
+      var hy      = vhy * CELL + CELL / 2;
+      var eFwd    = CELL * 0.25;  // offset toward the front edge
+      var ePerp   = CELL * 0.18; // offset perpendicular (spread apart)
+      var eRadius = CELL * 0.10;
+      var eyes = d === 'R' ? [ eFwd, -ePerp,  eFwd,  ePerp] :
+                 d === 'L' ? [-eFwd, -ePerp, -eFwd,  ePerp] :
+                 d === 'U' ? [-ePerp, -eFwd,  ePerp, -eFwd] :
+                             [-ePerp,  eFwd,  ePerp,  eFwd];
+      ctx.shadowBlur  = CELL * 0.4;
+      ctx.shadowColor = 'rgba(' + PALETTE.eyeShadowRgb + ', 0.9)';
+      ctx.fillStyle   = 'rgba(' + PALETTE.eyeRgb + ', 0.95)';
+      ctx.beginPath(); ctx.arc(hx + eyes[0], hy + eyes[1], eRadius, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(hx + eyes[2], hy + eyes[3], eRadius, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+  }
+
+  // ── Game lifecycle ─────────────────────────────────────────────────────────
+
+  function endGame() {
+    g.playing = false;
+    autoPath.length = 0;
+    var GW = cfg.GW, GH = cfg.GH;
+    var cells = GW * GH;
+    recordRoundStats(g.score, g.snake.length, cells);
+    updateBest();
+    if (document.getElementById('stats-modal').classList.contains('open')) {
+      refreshStatsModalContent();
+    }
+    draw();
+    setTimeout(restart, 800);
+  }
+
+  function restart() {
+    var GW = cfg.GW, GH = cfg.GH;
+    g.snake    = [{ x: 2, y: Math.floor(GH / 2) }];
+    g.dir      = 'R';
+    g.food     = randomFood(g.snake, GW, GH);
+    g.score    = 0;
+    g.lastTick  = 0;
+    g.frame     = 0;
+    g.eatFlash  = 0;
+    g.playing   = true;
+    g.prevSnake = [];
+    autoPath.length = 0;
+    if (scoreEl) scoreEl.textContent = '0';
+    updateBestDisplay();
+    rafId = requestAnimationFrame(loop);
+  }
+
+  // ── AI loop ────────────────────────────────────────────────────────────────
+
+  function loop(ts) {
+    if (!g.playing) return;
+
+    var GW = cfg.GW, GH = cfg.GH;
+    var MAX_SCORE = GW * GH - 1;
+
+    if (ts - g.lastTick >= speed) {
+      g.lastTick = ts;
+
+      var head = g.snake[0];
+
+      // ── Step 1: Edge-avoiding Dijkstra path to food ────────────────────────
+      // Stricter than before: isMoveSafe requires tail reachability AND
+      // flood_fill >= snake.length (prevents entering corridors that are
+      // traversable but too narrow to escape once the body fills in).
+      var moved = false;
+      var path  = pathToTargetAvoidingEdges(head, g.food, g.snake, GW, GH);
+      if (path && path.length > 0 && isMoveSafe(path[0], g.snake, g.food, GW, GH)) {
+        g.dir = ptToDir(head, path[0]);
+        autoPath.length = 0;
+        for (var i = 0; i < path.length; i++) autoPath.push(path[i]);
+        moved = true;
+      }
+
+      if (!moved) {
+        // ── Step 2: No safe food path — score neighbours and survive ─────────
+        // Scores each valid move on three axes:
+        //   • Tail reachability (ensures we can always follow our own tail)
+        //   • Flood fill space (enough room for the whole body)
+        //   • Body spread (prefer positions far from own body to avoid self-trapping)
+        //   • Edge penalty (stay away from walls when possible)
+        //
+        // Tail-chasing (bfsPath to tail) gets a strong bonus: it keeps the
+        // snake moving in a direction where space is continuously opening up.
+        var CELLS    = GW * GH;
+        var tail     = g.snake[g.snake.length - 1];
+        var EDGE_PEN = CELLS * 0.25;
+
+        // BFS path toward our own tail — the research-backed survival strategy
+        var tailPath = bfsPath(head, tail, g.snake, GW, GH);
+        var tailNext = tailPath && tailPath.length > 0 ? tailPath[0] : null;
+
+        var neighbors = getNeighborPts(head, GW, GH);
+        var bestSafePt = null, bestSafeScore = -Infinity;
+        var bestAnyPt  = null, bestAnyScore  = -Infinity;
+
+        for (var i = 0; i < neighbors.length; i++) {
+          var pt = neighbors[i];
+          if (isBodyOccupied(pt, g.snake, GW)) continue;
+          var nSnake = [pt].concat(g.snake.slice(0, -1));
+          var space  = floodCount(pt, nSnake, GW, GH);
+          if (space < nSnake.length) continue; // not enough room — skip
+
+          var tailOk     = canReach(pt, tail, nSnake, GW, GH);
+          var foodOk     = canReach(pt, g.food, nSnake, GW, GH);
+          var nearEdge   = isNearEdge(pt, GW, GH);
+          var isTailPath = tailNext && pt.x === tailNext.x && pt.y === tailNext.y;
+          var spread     = bodySpreadScore(pt, g.snake);
+
+          var sc = space
+            + spread * 4
+            + (isTailPath ? CELLS * 0.5 : 0)
+            + (foodOk    ? CELLS * 0.2 : 0)
+            - (nearEdge  ? EDGE_PEN    : 0);
+
+          if (tailOk) {
+            if (sc > bestSafeScore) { bestSafeScore = sc; bestSafePt = pt; }
+          } else {
+            if (sc > bestAnyScore)  { bestAnyScore  = sc; bestAnyPt  = pt; }
+          }
+        }
+
+        var chosen = bestSafePt || bestAnyPt;
+        if (chosen) {
+          g.dir = ptToDir(head, chosen);
+          var followingTail = tailNext && chosen.x === tailNext.x && chosen.y === tailNext.y;
+          if (followingTail && tailPath) {
+            autoPath.length = 0;
+            for (var i = 0; i < tailPath.length; i++) autoPath.push(tailPath[i]);
+          } else {
+            autoPath.length = 1; autoPath[0] = chosen;
+          }
+          moved = true;
+        }
+        // If still no valid move the snake is fully trapped; it will die next tick
+      }
+
+      var d    = g.dir;
+      var next = {
+        x: head.x + (d === 'R' ? 1 : d === 'L' ? -1 : 0),
+        y: head.y + (d === 'D' ? 1 : d === 'U' ? -1 : 0),
+      };
+
+      var bodyNoTail = g.snake.slice(0, -1);
+      if (
+        next.x < 0 || next.x >= GW ||
+        next.y < 0 || next.y >= GH ||
+        bodyNoTail.some(function (s) { return s.x === next.x && s.y === next.y; })
+      ) {
+        endGame();
+        return;
+      }
+
+      g.prevSnake = g.snake; // reference to old array — safe since concat makes a new one below
+      g.snake     = [next].concat(g.snake);
+
+      if (next.x === g.food.x && next.y === g.food.y) {
+        g.score++;
+        if (EAT_FLASH_ENABLED) g.eatFlash = 10;
+        if (scoreEl) scoreEl.textContent = String(g.score);
+        if (g.score >= MAX_SCORE) { endGame(); return; }
+        g.food = randomFood(g.snake, GW, GH);
+      } else {
+        g.snake.pop();
+      }
+    }
+
+    draw(ts);
+    rafId = requestAnimationFrame(loop);
+  }
+
+  // ── Canvas setup ───────────────────────────────────────────────────────────
+
+  function setupCanvas() {
+    initPalette();
+    cancelAnimationFrame(rafId);
+    cfg = computeGridConfig();
+    var GW = cfg.GW, GH = cfg.GH, SW = cfg.SW, SH = cfg.SH;
+
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width  = SW * dpr;
+    canvas.height = SH * dpr;
+    canvas.style.width  = SW + 'px';
+    canvas.style.height = SH + 'px';
+    canvasWrap.style.width  = '';
+    canvasWrap.style.height = '';
+    // Slider: max 400px but never more than 80% of the board width
+    document.getElementById('speed-slider-wrap').style.maxWidth =
+      Math.min(400, Math.round(SW * 0.8)) + 'px';
+
+    var ctx = canvas.getContext('2d');
+    if (ctx) ctx.scale(dpr, dpr);
+
+    restart();
+  }
+
+  // ── Events ─────────────────────────────────────────────────────────────────
+
+  // Slider is inverted: right = fast (25ms), left = slow (400ms).
+  // value=375 default → speed = 25 + 400 - 375 = 50ms.
+  function sliderToSpeed(v) { return SPEED_MAX + SPEED_MIN - v; }
+
+  speedSlider.min   = SPEED_MAX;
+  speedSlider.max   = SPEED_MIN;
+  speedSlider.step  = SPEED_MAX;
+  speed = loadSpeed();
+  speedSlider.value = SPEED_MAX + SPEED_MIN - speed;
+
+  speedSlider.addEventListener('input', function () {
+    speed = sliderToSpeed(parseInt(speedSlider.value, 10));
+    saveSpeed(speed);
+  });
+
+  document.getElementById('reset-btn').addEventListener('click', function () {
+    restart();
+  });
+
+  function formatStat(val, cells, decimals, suffix) {
+    if (val == null || (typeof val === 'number' && isNaN(val))) return '—';
+    var fmt = decimals != null ? val.toFixed(decimals) : String(val);
+    return fmt + (suffix || '') + (cells ? ' (' + cells + ' cells)' : '');
+  }
+
+  function refreshStatsModalContent() {
+    var stats = loadStats();
+    var alltime = document.getElementById('stats-alltime');
+    var last = document.getElementById('stats-last');
+    if (!alltime || !last) return;
+    alltime.innerHTML =
+      '<div class="stat-row">Max score: <strong>' + formatStat(stats.maxScore, stats.maxScoreCells || null) + '</strong></div>' +
+      '<div class="stat-row">Max cells filled: <strong>' + formatStat(stats.maxCellsFilledPct, stats.maxCellsFilledPctCells || null, 1, '%') + '</strong></div>' +
+      '<div class="stat-row">Max round length: <strong>' + formatStat(stats.maxRoundLength, stats.maxRoundLengthCells || null) + '</strong></div>' +
+      '<div class="stat-row">Min cells filled per score: <strong>' + formatStat(stats.minCellsFilledPerScore, stats.minCellsFilledPerScoreCells || null, 2) + '</strong></div>';
+    var lr = stats.lastRound;
+    if (lr) {
+      last.innerHTML =
+        '<div class="stat-row">Score: <strong>' + formatStat(lr.score, lr.cells) + '</strong></div>' +
+        '<div class="stat-row">Cells filled: <strong>' + formatStat(lr.cellsFilledPct, lr.cells, 1, '%') + '</strong></div>' +
+        '<div class="stat-row">Round length: <strong>' + formatStat(lr.roundLength, lr.cells) + '</strong></div>' +
+        '<div class="stat-row">Cells filled per score: <strong>' + formatStat(lr.cellsFilledPerScore, lr.cells, 2) + '</strong></div>';
+    } else {
+      last.innerHTML = '<div class="stat-row" style="color:var(--color-text-muted-2)">No rounds completed yet</div>';
+    }
+  }
+
+  function openStatsModal() {
+    refreshStatsModalContent();
+    document.getElementById('stats-modal').classList.add('open');
+  }
+
+  function closeStatsModal() {
+    document.getElementById('stats-modal').classList.remove('open');
+  }
+
+  document.getElementById('stats-btn').addEventListener('click', openStatsModal);
+  document.getElementById('stats-modal').addEventListener('click', function (e) {
+    if (e.target === document.getElementById('stats-modal')) closeStatsModal();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && document.getElementById('stats-modal').classList.contains('open')) {
+      closeStatsModal();
+    }
+  });
+
+  var resizeTimer;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      var nc = computeGridConfig();
+      if (nc.GW !== cfg.GW || nc.GH !== cfg.GH || nc.CELL !== cfg.CELL) {
+        setupCanvas();
+      }
+    }, 150);
+  });
+
+  // ── Boot ───────────────────────────────────────────────────────────────────
+
+  setupCanvas();
+
+})();
+  </script>
+</body>
+</html>
