@@ -68,8 +68,6 @@ Some directions worth exploring:
 
 If you have an idea for improving the bot's score *without* making it visually less interesting, that is exactly the kind of PR worth discussing.
 
-→ [Open an issue or PR on GitHub](https://github.com/OptiCode/snake-dash)
-
 ---
 
 ## Tuning it
