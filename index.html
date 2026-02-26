@@ -76,7 +76,7 @@
       left: 50%;
       transform: translateX(-50%) translateY(calc(-50% - 2px));
       z-index: 10;
-      width: 80%;
+      width: 90%;
       padding: 7px 16px;
       background: var(--color-panel-bg);
       border: 1px solid var(--color-border-subtle);
@@ -135,10 +135,38 @@
       border-radius: 6px;
       cursor: pointer;
       white-space: nowrap;
+      min-width: 62px;
     }
     .game-btn:hover {
       background: rgba(var(--color-primary-rgb), 0.4);
       color: var(--color-text-hover);
+    }
+    .game-btn--smart {
+      background: rgba(20, 80, 30, 0.55);
+      border-color: rgba(40, 140, 60, 0.6);
+      color: #5db870;
+    }
+    .game-btn--smart:hover {
+      background: rgba(20, 80, 30, 0.75);
+      color: #7dd890;
+    }
+    .game-btn--smarter {
+      background: rgba(20, 160, 50, 0.4);
+      border-color: rgba(50, 210, 80, 0.65);
+      color: #4de870;
+    }
+    .game-btn--smarter:hover {
+      background: rgba(20, 160, 50, 0.6);
+      color: #80ff98;
+    }
+    .game-btn--agi {
+      background: rgba(120, 40, 200, 0.45);
+      border-color: rgba(180, 80, 255, 0.65);
+      color: #c97fff;
+    }
+    .game-btn--agi:hover {
+      background: rgba(120, 40, 200, 0.65);
+      color: #ddb0ff;
     }
 
     #score-display {
@@ -215,6 +243,7 @@
         <label>
           <span>Speed</span>
           <input type="range" id="speed-slider">
+          <button type="button" id="mode-btn" class="game-btn">Normal</button>
           <button type="button" id="reset-btn" class="game-btn">Reset</button>
         </label>
       </div>
@@ -246,6 +275,7 @@
 
   var LS_KEY_SPEED = 'opticode-snake-ai-speed';
   var LS_KEY_STATS = 'opticode-snake-ai-stats';
+  var LS_KEY_MODE  = 'opticode-snake-ai-mode';
   var BASE_CELL = 20;
 
   function cssVar(name) {
@@ -280,7 +310,33 @@
   var SPEED_MAX     = 10;  // fastest (smallest delay ms)
   var SPEED_DEFAULT = 200;
   var EAT_FLASH_ENABLED = false; // set true for screen flash on food intake
-  var SPACE_MARGIN = 1.5; // flood-fill from next head must be >= snake.length * this factor
+  var SPACE_MARGIN    = 1.5; // flood-fill from next head must be >= snake.length * this factor
+
+  // ── Mode presets (mapped to the 4 toggle states) ──────────────────────────
+  var LOOKAHEAD_STEPS_A        = 0;   // Normal  — no lookahead
+  var LOOKAHEAD_STEPS_B        = 100; // Smart   — targeted perpendicular veto
+  var ALWAYS_LOOKAHEAD_STEPS_A = 100; // Smarter — every-move veto
+  var ALWAYS_LOOKAHEAD_STEPS_B = 200; // AGI     — deeper every-move veto
+
+  // Active runtime values (updated by the mode toggle button)
+  var LOOKAHEAD_STEPS        = LOOKAHEAD_STEPS_A;
+  var ALWAYS_LOOKAHEAD_STEPS = 0;
+
+  // ── AI tuning values (optimised via optimize_snake.py) ────────────────────
+  var AI_EDGE_STEP_COST    = 2;    // Dijkstra cost for near-edge cells (interior = 1)
+  var AI_EDGE_PEN_FACTOR   = 0.25; // survival edge penalty  = CELLS × this
+  var AI_TAIL_BONUS_FACTOR = 0.2;  // survival tail-chase bonus = CELLS × this
+  var AI_SPREAD_MULT       = 2;    // body-spread score multiplier
+
+  // ── Direction helpers ──────────────────────────────────────────────────────
+  var TURN_LEFT  = { R: 'U', U: 'L', L: 'D', D: 'R' };
+  var TURN_RIGHT = { R: 'D', D: 'L', L: 'U', U: 'R' };
+  function applyDir(pt, dir) {
+    return {
+      x: pt.x + (dir === 'R' ? 1 : dir === 'L' ? -1 : 0),
+      y: pt.y + (dir === 'D' ? 1 : dir === 'U' ? -1 : 0)
+    };
+  }
 
   // Snake colors
   var SNAKE_HEAD_RGB = [232, 83, 192];
@@ -350,7 +406,7 @@
   }
 
   function edgeStepCost(pt, GW, GH) {
-    return edgeDistance(pt, GW, GH) <= 1 ? 5 : 1;
+    return edgeDistance(pt, GW, GH) <= 1 ? (IS_AGI ? 1 : AI_EDGE_STEP_COST) : 1;
   }
 
   function randomFood(snake, GW, GH) {
@@ -519,6 +575,86 @@
   }
 
 
+  // ── Lookahead simulation ────────────────────────────────────────────────────
+  // Runs the exact same two-step AI (Dijkstra-to-food → survival scoring) for
+  // up to `maxSteps` ticks from the given initial snake/food state.
+  // Returns the number of steps survived; == maxSteps means no death detected.
+  function simulateLookahead(initSnake, initFood, GW, GH, maxSteps) {
+    var simSnake = initSnake.map(function (p) { return { x: p.x, y: p.y }; });
+    var simFood  = { x: initFood.x, y: initFood.y };
+    var simDir   = simSnake.length >= 2 ? ptToDir(simSnake[1], simSnake[0]) : 'R';
+    var CELLS    = GW * GH;
+
+    for (var step = 0; step < maxSteps; step++) {
+      var sHead  = simSnake[0];
+      var sMoved = false;
+
+      // Step 1: edge-avoiding Dijkstra to food (mirrors main loop Step 1)
+      var sPath = pathToTargetAvoidingEdges(sHead, simFood, simSnake, GW, GH);
+      if (sPath && sPath.length > 0 && isMoveSafe(sPath[0], simSnake, simFood, GW, GH)) {
+        simDir = ptToDir(sHead, sPath[0]);
+        sMoved = true;
+      }
+
+      // Step 2: survival scoring (mirrors main loop Step 2)
+      if (!sMoved) {
+        var sTail     = simSnake[simSnake.length - 1];
+        var sEdgePen  = CELLS * (IS_AGI ? 0 : AI_EDGE_PEN_FACTOR);
+        var sTailPath = bfsPath(sHead, sTail, simSnake, GW, GH);
+        var sTailNext = sTailPath && sTailPath.length > 0 ? sTailPath[0] : null;
+        var sNbrs     = getNeighborPts(sHead, GW, GH);
+        var sBestSafe = null, sBestSafeScore = -Infinity;
+        var sBestAny  = null, sBestAnyScore  = -Infinity;
+
+        for (var sni = 0; sni < sNbrs.length; sni++) {
+          var spt    = sNbrs[sni];
+          if (isBodyOccupied(spt, simSnake, GW)) continue;
+          var snSnake = [spt].concat(simSnake.slice(0, -1));
+          var sSpace  = floodCount(spt, snSnake, GW, GH);
+          if (sSpace < snSnake.length) continue;
+          var sTailOk  = canReach(spt, sTail, snSnake, GW, GH);
+          var sFoodOk  = canReach(spt, simFood, snSnake, GW, GH);
+          var sNearEdge = isNearEdge(spt, GW, GH);
+          var sIsTail  = sTailNext && spt.x === sTailNext.x && spt.y === sTailNext.y;
+          var sSpread  = bodySpreadScore(spt, simSnake);
+          var sSc = sSpace + sSpread * (IS_AGI ? 0 : AI_SPREAD_MULT)
+            + (sIsTail   ? CELLS * (IS_AGI ? 0 : AI_TAIL_BONUS_FACTOR) : 0)
+            + (sFoodOk   ? CELLS * 0.2   : 0)
+            - (sNearEdge ? sEdgePen      : 0);
+          if (sTailOk) {
+            if (sSc > sBestSafeScore) { sBestSafeScore = sSc; sBestSafe = spt; }
+          } else {
+            if (sSc > sBestAnyScore)  { sBestAnyScore  = sSc; sBestAny  = spt; }
+          }
+        }
+        var sChosen = sBestSafe || sBestAny;
+        if (sChosen) { simDir = ptToDir(sHead, sChosen); sMoved = true; }
+      }
+
+      // Advance state
+      var sd    = simDir;
+      var snext = {
+        x: sHead.x + (sd === 'R' ? 1 : sd === 'L' ? -1 : 0),
+        y: sHead.y + (sd === 'D' ? 1 : sd === 'U' ? -1 : 0)
+      };
+      var sbodyNT = simSnake.slice(0, -1);
+      if (
+        snext.x < 0 || snext.x >= GW || snext.y < 0 || snext.y >= GH ||
+        sbodyNT.some(function (ss) { return ss.x === snext.x && ss.y === snext.y; })
+      ) {
+        return step; // died — return step index (0-based)
+      }
+      simSnake = [snext].concat(simSnake);
+      if (snext.x === simFood.x && snext.y === simFood.y) {
+        if (simSnake.length >= CELLS) return maxSteps; // board filled — victory
+        simFood = randomFood(simSnake, GW, GH);
+      } else {
+        simSnake.pop();
+      }
+    }
+    return maxSteps; // survived all steps
+  }
+
   // ── DOM refs ───────────────────────────────────────────────────────────────
 
   var canvas      = document.getElementById('game-canvas');
@@ -543,7 +679,8 @@
     frame:    0,
     eatFlash: 0,
     playing:   false,
-    prevSnake: [], // snake positions before last tick (for whole-body interpolation)
+    prevSnake:   [], // snake positions before last tick (for whole-body interpolation)
+    headHistory: [], // rolling buffer of head positions for cycle detection
   };
 
   // ── LocalStorage ───────────────────────────────────────────────────────────
@@ -627,14 +764,14 @@
     saveStats(stats);
   }
 
-  function formatBestDisplay(score, cells) {
+  function formatBestDisplay(score) {
     if (!score && score !== 0) return '0';
-    return cells ? score + ' (' + cells + ' cells)' : String(score);
+    return String(score);
   }
 
   function updateBestDisplay() {
     var stats = loadStats();
-    if (bestEl) bestEl.textContent = formatBestDisplay(stats.maxScore, stats.maxScoreCells || null);
+    if (bestEl) bestEl.textContent = formatBestDisplay(stats.maxScore);
   }
 
   function updateBest() {
@@ -820,8 +957,9 @@
     g.lastTick  = 0;
     g.frame     = 0;
     g.eatFlash  = 0;
-    g.playing   = true;
-    g.prevSnake = [];
+    g.playing     = true;
+    g.prevSnake   = [];
+    g.headHistory = [];
     autoPath.length = 0;
     if (scoreEl) scoreEl.textContent = '0';
     updateBestDisplay();
@@ -839,23 +977,56 @@
     if (ts - g.lastTick >= speed) {
       g.lastTick = ts;
 
-      var head = g.snake[0];
+      var head    = g.snake[0];
+      var origDir = g.dir; // travel direction before AI update (used by lookahead)
+
+      // Track head position for cycle detection (recorded before each move)
+      g.headHistory.push({ x: head.x, y: head.y });
+      var period   = g.snake.length;
+      var hist     = g.headHistory;
+      var isLooping = false;
+      if (hist.length >= period * 2) {
+        isLooping = true;
+        for (var ci = 0; ci < period && isLooping; ci++) {
+          var ha = hist[hist.length - 1 - ci];
+          var hb = hist[hist.length - 1 - ci - period];
+          if (ha.x !== hb.x || ha.y !== hb.y) isLooping = false;
+        }
+        if (hist.length > period * 3) g.headHistory = hist.slice(-period * 2);
+      }
 
       // ── Step 1: Edge-avoiding Dijkstra path to food ────────────────────────
       // Stricter than before: isMoveSafe requires tail reachability AND
       // flood_fill >= snake.length (prevents entering corridors that are
       // traversable but too narrow to escape once the body fills in).
-      var moved = false;
+      var moved     = false;
+      var foodPath  = false; // true when Step 1 secured a safe food route
       var path  = pathToTargetAvoidingEdges(head, g.food, g.snake, GW, GH);
       if (path && path.length > 0 && isMoveSafe(path[0], g.snake, g.food, GW, GH)) {
         g.dir = ptToDir(head, path[0]);
         autoPath.length = 0;
         for (var i = 0; i < path.length; i++) autoPath.push(path[i]);
-        moved = true;
+        moved    = true;
+        foodPath = true;
       }
 
       if (!moved) {
-        // ── Step 2: No safe food path — score neighbours and survive ─────────
+        // ── Step 2a: Loop-escape ──────────────────────────────────────────────
+        // Fires only when the head sequence has repeated itself exactly once —
+        // a mathematical proof of a tail-chase cycle. Relaxes the flood-fill
+        // safety requirement and forces a direct BFS route to food.
+        if (isLooping) {
+          var escapePath = bfsPath(head, g.food, g.snake, GW, GH);
+          if (escapePath && escapePath.length > 0) {
+            g.dir = ptToDir(head, escapePath[0]);
+            g.headHistory.length = 0; // reset so we don't re-trigger next tick
+            autoPath.length = 0;
+            for (var i = 0; i < escapePath.length; i++) autoPath.push(escapePath[i]);
+            moved = true;
+          }
+        }
+
+        // ── Step 2b: Score neighbours and survive ────────────────────────────
         // Scores each valid move on three axes:
         //   • Tail reachability (ensures we can always follow our own tail)
         //   • Flood fill space (enough room for the whole body)
@@ -866,7 +1037,7 @@
         // snake moving in a direction where space is continuously opening up.
         var CELLS    = GW * GH;
         var tail     = g.snake[g.snake.length - 1];
-        var EDGE_PEN = CELLS * 0.25;
+        var EDGE_PEN = CELLS * (IS_AGI ? 0 : AI_EDGE_PEN_FACTOR);
 
         // BFS path toward our own tail — the research-backed survival strategy
         var tailPath = bfsPath(head, tail, g.snake, GW, GH);
@@ -890,8 +1061,8 @@
           var spread     = bodySpreadScore(pt, g.snake);
 
           var sc = space
-            + spread * 4
-            + (isTailPath ? CELLS * 0.5 : 0)
+            + spread * (IS_AGI ? 0 : AI_SPREAD_MULT)
+            + (isTailPath ? CELLS * (IS_AGI ? 0 : AI_TAIL_BONUS_FACTOR) : 0)
             + (foodOk    ? CELLS * 0.2 : 0)
             - (nearEdge  ? EDGE_PEN    : 0);
 
@@ -914,7 +1085,65 @@
           }
           moved = true;
         }
-        // If still no valid move the snake is fully trapped; it will die next tick
+      }
+
+      // ── Step 3: Lookahead (veto mode) ────────────────────────────────────────
+      // Both modes act as a veto, not a scorer: simulate the AI's chosen direction
+      // first; only override if it leads to death AND a better alternative exists.
+      // This preserves normal food-seeking behaviour and only intervenes when the
+      // chosen path is genuinely dangerous.
+      // Targeted mode also requires: straight blocked + both perp free
+      var laTargetedOk = false;
+      if (LOOKAHEAD_STEPS > 0 && !foodPath) {
+        var laTmpBodyNT = new Set(g.snake.slice(0, -1).map(function (s) { return ptKey(s, GW); }));
+        var laFwdPt  = applyDir(head, origDir);
+        var laFwdBlocked = laFwdPt.x < 0 || laFwdPt.x >= GW || laFwdPt.y < 0 || laFwdPt.y >= GH || laTmpBodyNT.has(ptKey(laFwdPt, GW));
+        if (laFwdBlocked) {
+          var laTmpL = applyDir(head, TURN_LEFT[origDir]);
+          var laTmpR = applyDir(head, TURN_RIGHT[origDir]);
+          var laTmpLFree = laTmpL.x >= 0 && laTmpL.x < GW && laTmpL.y >= 0 && laTmpL.y < GH && !laTmpBodyNT.has(ptKey(laTmpL, GW));
+          var laTmpRFree = laTmpR.x >= 0 && laTmpR.x < GW && laTmpR.y >= 0 && laTmpR.y < GH && !laTmpBodyNT.has(ptKey(laTmpR, GW));
+          laTargetedOk = laTmpLFree && laTmpRFree;
+        }
+      }
+      var laSteps = ALWAYS_LOOKAHEAD_STEPS > 0 ? ALWAYS_LOOKAHEAD_STEPS : (laTargetedOk ? LOOKAHEAD_STEPS : 0);
+      if (laSteps > 0) {
+        var laBodyNT = new Set(g.snake.slice(0, -1).map(function (s) { return ptKey(s, GW); }));
+        var laOpposite = { R: 'L', L: 'R', U: 'D', D: 'U' };
+
+        // Simulate the AI's current choice
+        var laChPt    = applyDir(head, g.dir);
+        var laChEats  = laChPt.x === g.food.x && laChPt.y === g.food.y;
+        var laChSim   = laChEats ? [laChPt].concat(g.snake) : [laChPt].concat(g.snake.slice(0, -1));
+        var laChFood  = laChEats ? randomFood(laChSim, GW, GH) : g.food;
+        var laChScore = simulateLookahead(laChSim, laChFood, GW, GH, laSteps);
+
+        if (laChScore < laSteps) {
+          // Chosen path leads to death — check alternatives
+          // Always-on mode: try all valid directions.
+          // Targeted mode: only try the two perpendicular options.
+          var laCandidates;
+          if (ALWAYS_LOOKAHEAD_STEPS > 0) {
+            laCandidates = ['R', 'L', 'U', 'D'];
+          } else {
+            laCandidates = [TURN_LEFT[origDir], TURN_RIGHT[origDir]];
+          }
+          var laBest = g.dir, laBestScore = laChScore;
+          for (var lai = 0; lai < laCandidates.length; lai++) {
+            var laDir = laCandidates[lai];
+            if (laDir === g.dir || laDir === laOpposite[origDir]) continue;
+            var laPt = applyDir(head, laDir);
+            if (laPt.x < 0 || laPt.x >= GW || laPt.y < 0 || laPt.y >= GH) continue;
+            if (laBodyNT.has(ptKey(laPt, GW))) continue;
+            var laEats = laPt.x === g.food.x && laPt.y === g.food.y;
+            var laSim  = laEats ? [laPt].concat(g.snake) : [laPt].concat(g.snake.slice(0, -1));
+            var laFood = laEats ? randomFood(laSim, GW, GH) : g.food;
+            var laScore = simulateLookahead(laSim, laFood, GW, GH, laSteps);
+            if (laScore > laBestScore) { laBestScore = laScore; laBest = laDir; }
+          }
+          g.dir = laBest;
+        }
+        // If laChScore == laSteps the chosen path is fine — no override needed.
       }
 
       var d    = g.dir;
@@ -938,6 +1167,7 @@
 
       if (next.x === g.food.x && next.y === g.food.y) {
         g.score++;
+        g.headHistory.length = 0; // progress made — reset cycle detection
         if (EAT_FLASH_ENABLED) g.eatFlash = 10;
         if (scoreEl) scoreEl.textContent = String(g.score);
         if (g.score >= MAX_SCORE) { endGame(); return; }
@@ -966,9 +1196,9 @@
     canvas.style.height = SH + 'px';
     canvasWrap.style.width  = '';
     canvasWrap.style.height = '';
-    // Slider: max 400px but never more than 80% of the board width
+    // Slider: max 500px but never more than 90% of the board width
     document.getElementById('speed-slider-wrap').style.maxWidth =
-      Math.min(400, Math.round(SW * 0.8)) + 'px';
+      Math.min(500, Math.round(SW * 0.9)) + 'px';
 
     var ctx = canvas.getContext('2d');
     if (ctx) ctx.scale(dpr, dpr);
@@ -991,6 +1221,37 @@
   speedSlider.addEventListener('input', function () {
     speed = sliderToSpeed(parseInt(speedSlider.value, 10));
     saveSpeed(speed);
+  });
+
+  var aiMode  = 0;
+  var modeBtn = document.getElementById('mode-btn');
+  var MODE_CONFIG = [
+    { label: 'Normal',  cls: '',                lookahead: LOOKAHEAD_STEPS_A,        always: 0                      },
+    { label: 'Smart',   cls: 'game-btn--smart',   lookahead: LOOKAHEAD_STEPS_B,        always: 0                      },
+    { label: 'Smarter', cls: 'game-btn--smarter', lookahead: 0,                        always: ALWAYS_LOOKAHEAD_STEPS_A },
+    { label: 'AGI',     cls: 'game-btn--agi',     lookahead: 0,                        always: ALWAYS_LOOKAHEAD_STEPS_B },
+  ];
+  var IS_AGI = ALWAYS_LOOKAHEAD_STEPS === ALWAYS_LOOKAHEAD_STEPS_B;
+
+  function applyAiMode(idx) {
+    aiMode = idx;
+    var m = MODE_CONFIG[idx];
+    LOOKAHEAD_STEPS        = m.lookahead;
+    ALWAYS_LOOKAHEAD_STEPS = m.always;
+    modeBtn.textContent = m.label;
+    modeBtn.className   = 'game-btn' + (m.cls ? ' ' + m.cls : '');
+    try { localStorage.setItem(LS_KEY_MODE, String(idx)); } catch (e) {}
+  }
+
+  (function () {
+    try {
+      var saved = parseInt(localStorage.getItem(LS_KEY_MODE), 10);
+      if (saved >= 0 && saved < MODE_CONFIG.length) applyAiMode(saved);
+    } catch (e) {}
+  })();
+
+  modeBtn.addEventListener('click', function () {
+    applyAiMode((aiMode + 1) % MODE_CONFIG.length);
   });
 
   document.getElementById('reset-btn').addEventListener('click', function () {
