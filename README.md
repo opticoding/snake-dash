@@ -202,7 +202,7 @@ All parameters live at the top of the `<script>` block.
 | `LOOKAHEAD_STEPS_A` | `0` | Steps simulated in Normal mode (0 = disabled) |
 | `LOOKAHEAD_STEPS_B` | `100` | Steps simulated in Smart mode (targeted perpendicular veto) |
 | `ALWAYS_LOOKAHEAD_STEPS_A` | `100` | Steps simulated in Smarter mode (every-move veto) |
-| `ALWAYS_LOOKAHEAD_STEPS_B` | `500` | Steps simulated in AGI mode (deeper every-move veto) |
+| `ALWAYS_LOOKAHEAD_STEPS_B` | `200` | Steps simulated in AGI mode (deeper every-move veto) |
 
 ---
 
